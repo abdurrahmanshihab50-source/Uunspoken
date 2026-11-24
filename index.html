@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UNSPOKEN | Your Voice Matters</title>
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+
+body{
+ font-family:Arial,sans-serif;
+ background:#f4f4f8;color:#242438;
+ transition:.3s;
+}
+body.dark{background:#10101b;color:#eee}
+
+header{
+ background:#171727;color:white;
+ padding:28px 15px;text-align:center;
+}
+header h1{font-size:32px;letter-spacing:6px}
+header p{color:#bbb;margin-top:9px}
+
+nav{
+ background:#24243a;padding:13px;
+ display:flex;justify-content:center;
+ flex-wrap:wrap;gap:9px;
+}
+button{
+ cursor:pointer;border:0;border-radius:9px;
+ padding:11px 15px;font-size:14px;
+}
+nav button{background:#41415d;color:white}
+
+.container{max-width:720px;margin:22px auto;padding:12px}
+
+.card{
+ background:white;border-radius:15px;
+ padding:20px;margin-bottom:18px;
+ box-shadow:0 3px 15px #0001;
+}
+.dark .card{background:#222234;color:white}
+
+input,textarea,select{
+ width:100%;padding:13px;margin:9px 0;
+ border:1px solid #ccc;border-radius:9px;
+ font-size:15px;background:transparent;color:inherit;
+}
+select option{color:#222}
+
+.primary{background:#6254d9;color:white}
+.secondary{background:#ddd;color:#222}
+.danger{background:#c83d55;color:white}
+.success{background:#238b62;color:white}
+
+.hidden{display:none!important}
+.post-content{white-space:pre-wrap;line-height:1.7;margin:15px 0}
+.meta{font-size:12px;color:gray;margin-top:7px}
+.status{font-size:12px;color:#b77a18;margin-top:8px}
+.actions{display:flex;flex-wrap:wrap;gap:6px}
+h2,h3{margin-bottom:12px}
+footer{text-align:center;padding:25px;color:gray}
+#message{text-align:center;padding:12px}
+</style>
+</head>
+
+<body>
+
+<header>
+<h1>UNSPOKEN</h1>
+<p>Your words. Your feelings. Your world.</p>
+</header>
+
+<nav>
+<button onclick="showSection('home')">Home</button>
+<button onclick="showSection('write')">Write</button>
+<button onclick="showSection('dashboard')">Dashboard</button>
+<button onclick="toggleTheme()">🌙 Theme</button>
+</nav>
+
+<div class="container">
+
+<div class="card" id="account">
+<h2>Welcome to UNSPOKEN</h2>
+<p id="userInfo">Sign in to share your thoughts.</p>
+<br>
+<button class="primary" id="loginBtn" onclick="login()">Continue with Google</button>
+<button class="danger hidden" id="logoutBtn" onclick="logout()">Logout</button>
+</div>
+
+<div id="message"></div>
+
+<section id="home">
+<div class="card">
+<h2>Explore Stories</h2>
+<input id="search" placeholder="Search posts..." oninput="renderPosts()">
+<select id="filter" onchange="renderPosts()">
+<option value="All">All Categories</option>
+<option>Life</option>
+<option>Feelings</option>
+<option>Poetry</option>
+<option>Stories</option>
+<option>Thoughts</option>
+</select>
+</div>
+<div id="posts"></div>
+</section>
+
+<section id="write" class="hidden">
+<div class="card">
+<h2>Share Your Thoughts</h2>
+<p>Your post will be reviewed before publication.</p>
+
+<select id="category">
+<option>Life</option>
+<option>Feelings</option>
+<option>Poetry</option>
+<option>Stories</option>
+<option>Thoughts</option>
+</select>
+
+<textarea id="content" rows="6"
+maxlength="5000"
+placeholder="Write what is in your heart..."></textarea>
+
+<button class="primary" onclick="addPost()">Submit Post</button>
+</div>
+</section>
+
+<section id="dashboard" class="hidden">
+<div class="card">
+<h2>Admin Dashboard</h2>
+<p id="adminInfo">Admin access required.</p>
+<div id="adminPosts"></div>
+</div>
+</section>
+
+<div class="card">
+<h3>About UNSPOKEN</h3>
+<p>Every voice matters. Share your stories, feelings and thoughts.</p>
+</div>
+
+</div>
+
+<footer>© 2026 UNSPOKEN | Your Voice Matters</footer>
+
+<script type="module">
+
+import { initializeApp }
+from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+
+import {
+ getAuth,
+ GoogleAuthProvider,
+ signInWithPopup,
+ signOut,
+ onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+import {
+ getFirestore,
+ collection,
+ addDoc,
+ getDocs,
+ query,
+ where,
+ serverTimestamp,
+ deleteDoc,
+ doc,
+ updateDoc
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+// FIREBASE CONFIGURATION
+
+const firebaseConfig = {
+ apiKey: "AIzaSyCZJH7Xs2W4n5vOL8VhGT_kpV4FwxqZaqg",
+ authDomain: "unspoken-1e64a.firebaseapp.com",
+ projectId: "unspoken-1e64a",
+ storageBucket: "unspoken-1e64a.firebasestorage.app",
+ messagingSenderId: "183206296352",
+ appId: "1:183206296352:web:c131c030984fa4efc17545",
+ measurementId: "G-N5H40JC0TM"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const provider = new GoogleAuthProvider();
+
+const ADMIN_EMAIL = "abdurrahmanshihab50@gmail.com";
+
+let currentUser = null;
+let posts = [];
+
+const $ = id => document.getElementById(id);
+
+function message(text){
+ $("message").textContent = text;
+}
+
+window.showSection = function(section){
+ ["home","write","dashboard"].forEach(id=>{
+  $(id).classList.toggle("hidden",id!==section);
+ });
+};
+
+window.toggleTheme = function(){
+ document.body.classList.toggle("dark");
+};
+
+window.login = async function(){
+ try{
+  await signInWithPopup(auth,provider);
+ }catch(error){
+  message("Login error: "+error.message);
+ }
+};
+
+window.logout = async function(){
+ try{
+  await signOut(auth);
+  message("Logged out successfully.");
+ }catch(error){
+  message(error.message);
+ }
+};
+
+onAuthStateChanged(auth,async user=>{
+ currentUser=user;
+
+ if(user){
+  $("userInfo").textContent =
+   "Signed in as "+user.displayName;
+
+  $("loginBtn").classList.add("hidden");
+  $("logoutBtn").classList.remove("hidden");
+ }else{
+  $("userInfo").textContent="Sign in to share your thoughts.";
+  $("loginBtn").classList.remove("hidden");
+  $("logoutBtn").classList.add("hidden");
+ }
+
+ $("adminInfo").textContent =
+  user?.email===ADMIN_EMAIL
+  ? "Admin access active."
+  : "Admin access required.";
+
+ await loadPosts();
+});
+
+async function loadPosts(){
+ try{
+  posts=[];
+
+  if(currentUser?.email===ADMIN_EMAIL){
+   const snapshot=await getDocs(collection(db,"posts"));
+   snapshot.forEach(d=>posts.push({id:d.id,...d.data()}));
+  }else{
+   const publicQuery=query(
+    collection(db,"posts"),
+    where("status","==","published")
+   );
+
+   const publicData=await getDocs(publicQuery);
+
+   publicData.forEach(d=>posts.push({id:d.id,...d.data()}));
+
+   if(currentUser){
+    const ownQuery=query(
+     collection(db,"posts"),
+     where("authorId","==",currentUser.uid)
+    );
+
+    const ownData=await getDocs(ownQuery);
+
+    ownData.forEach(d=>{
+     if(!posts.some(p=>p.id===d.id)){
+      posts.push({id:d.id,...d.data()});
+     }
+    });
+   }
+  }
+
+  posts.sort((a,b)=>{
+   const x=a.createdAt?.seconds||0;
+   const y=b.createdAt?.seconds||0;
+   return y-x;
+  });
+
+  renderPosts();
+  renderAdmin();
+
+ }catch(error){
+  message("Database error: "+error.message);
+ }
+}
+
+window.addPost=async function(){
+ if(!currentUser){
+  message("Please sign in first.");
+  return;
+ }
+
+ const content=$("content").value.trim();
+ const category=$("category").value;
+
+ if(!content){
+  message("Please write something first.");
+  return;
+ }
+
+ try{
+  await addDoc(collection(db,"posts"),{
+   content:content,
+   category:category,
+   status:"pending",
+   authorId:currentUser.uid,
+   createdAt:serverTimestamp()
+  });
+
+  $("content").value="";
+  message("Your post has been submitted for review.");
+
+  await loadPosts();
+  showSection("home");
+
+ }catch(error){
+  message("Post error: "+error.message);
+ }
+};
+
+function renderPosts(){
+ const box=$("posts");
+ box.innerHTML="";
+
+ const search=$("search").value.toLowerCase();
+ const category=$("filter").value;
+
+ const visible=posts.filter(p=>
+  (p.status==="published" ||
+   (currentUser && p.authorId===currentUser.uid)) &&
+  (p.content||"").toLowerCase().includes(search) &&
+  (category==="All" || p.category===category)
+ );
+
+ visible.forEach(p=>{
+  const card=document.createElement("div");
+  card.className="card";
+
+  const title=document.createElement("h3");
+  title.textContent=p.category||"Story";
+
+  const text=document.createElement("p");
+  text.className="post-content";
+  text.textContent=p.content;
+
+  const status=document.createElement("p");
+  status.className="status";
+  status.textContent=p.status==="pending"?"Pending review":"Published";
+
+  card.append(title,text,status);
+
+  if(p.status==="published"){
+   const author=document.createElement("p");
+   author.className="meta";
+   author.textContent="UNSPOKEN Community";
+   card.append(author);
+  }
+
+  if(currentUser &&
+     (p.authorId===currentUser.uid ||
+      currentUser.email===ADMIN_EMAIL)){
+   const del=document.createElement("button");
+   del.className="danger";
+   del.textContent="Delete";
+   del.onclick=()=>deletePostItem(p);
+   card.append(del);
+  }
+
+  box.append(card);
+ });
+}
+
+async function deletePostItem(p){
+ if(!confirm("Delete this post?"))return;
+
+ try{
+  await deleteDoc(doc(db,"posts",p.id));
+  message("Post deleted.");
+  await loadPosts();
+ }catch(error){
+  message(error.message);
+ }
+}
+
+function renderAdmin(){
+ const box=$("adminPosts");
+ box.innerHTML="";
+
+ if(currentUser?.email!==ADMIN_EMAIL)return;
+
+ posts.filter(p=>p.status==="pending").forEach(p=>{
+  const card=document.createElement("div");
+  card.className="card";
+
+  const content=document.createElement("p");
+  content.textContent=p.content;
+
+  const category=document.createElement("p");
+  category.className="meta";
+  category.textContent=p.category;
+
+  const publish=document.createElement("button");
+  publish.className="success";
+  publish.textContent="Publish";
+  publish.onclick=()=>publishPost(p.id);
+
+  const remove=document.createElement("button");
+  remove.className="danger";
+  remove.textContent="Delete";
+  remove.onclick=()=>deletePostItem(p);
+
+  card.append(content,category,publish,remove);
+  box.append(card);
+ });
+}
+
+async function publishPost(id){
+ try{
+  await updateDoc(doc(db,"posts",id),{
+   status:"published"
+  });
+
+  message("Post published successfully.");
+  await loadPosts();
+ }catch(error){
+  message("Publish error: "+error.message);
+ }
+}
+
+</script>
+</body>
+</html>
